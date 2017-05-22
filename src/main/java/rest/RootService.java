@@ -1,16 +1,9 @@
 package rest;
 
-import com.sun.org.apache.xpath.internal.SourceTree;
-import org.omg.SendingContext.RunTime;
-
 import javax.tools.*;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.Charset;
+import javax.ws.rs.*;
+import javax.ws.rs.core.MediaType;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -23,27 +16,115 @@ import java.util.concurrent.TimeUnit;
  * Created by Christian on 19-05-2017.
  */
 @Path("")
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
 public class RootService {
 
-    @POST
-    public String getRoot(String code) {
-        System.out.println("code: " + code);
-        List<String> lines = new ArrayList<>();
-        lines.add(code);
-        try {
-            Files.write(Paths.get("filetofind.java"), lines);
-            return javaCompile("filetofind.java");
-        } catch (IOException e  ) {
-            e.printStackTrace();
-            System.out.println("failed");
-        } catch (InterruptedException e) {
-            return "Something interrupted the run of the code.";
-        }
-
-        return "test";
+    @GET
+    @Path("template")
+    public CompilePack getTemplate() throws IOException {
+        CompilePack compilePack = new CompilePack();
+        compilePack.setMainClass("Main");
+        FileRepresentation fileRepresentation = new FileRepresentation();
+        fileRepresentation.setFileName("Main.java");
+        fileRepresentation.setFileContents(mainContents());
+        compilePack.addFile(fileRepresentation);
+        return compilePack;
     }
 
-    private String javaCompile(String fileName) throws IOException, InterruptedException {
+    @POST
+    public CompileAndRunResult getRoot(CompilePack code) throws IOException, InterruptedException {
+        for (FileRepresentation codeFile: code.getFiles()) {
+            System.out.println(codeFile.getFileContents());
+
+        }
+
+        boolean allSuccess = true;
+        List<CompilationResult> results = new ArrayList<>();
+        for (FileRepresentation rep : code.getFiles()){
+            List<String> lines = new ArrayList<>();
+            lines.add(rep.getFileContents());
+            Files.write(Paths.get(rep.getFileName()),lines);
+            CompilationResult result = javaCompile(rep.getFileName());
+            results.add(result);
+            if (!result.isSuccess()) allSuccess=false;
+        }
+        RunResult runResult = null;
+
+        if (allSuccess){
+            runResult = javaRun(code);
+        }
+
+        CompileAndRunResult compileAndRunResult = new CompileAndRunResult(allSuccess,results,runResult);
+        return compileAndRunResult;
+
+    }
+
+    private CompilationResult javaCompile(String fileName) {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<>();
+        StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnosticCollector, null, StandardCharsets.UTF_8);
+        Iterable<? extends JavaFileObject> javaFileObjectsFromStrings = fileManager.getJavaFileObjectsFromStrings(Arrays.asList(fileName));
+
+        JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnosticCollector, null, null, javaFileObjectsFromStrings);
+        Boolean callSuccess = task.call();
+        CompilationResult compilationResult = new CompilationResult();
+        compilationResult.setSuccess(callSuccess);
+        List<DiagnosticResult> diagnosticResult = getDiagnosticResults(diagnosticCollector);
+        compilationResult.setDiagnostics(diagnosticResult);
+        System.out.println(callSuccess);
+        System.out.println(diagnosticCollector.getDiagnostics().size());
+        return compilationResult;
+    }
+
+    private RunResult javaRun(CompilePack pack) throws IOException, InterruptedException {
+        //Start process
+        Process proc = Runtime.getRuntime().exec("java -cp . " + pack.getMainClass());
+        // Setup Streams
+        InputStream errorStream = proc.getErrorStream(); //Error Output from Process
+        InputStream inputStream = proc.getInputStream(); //Output from Process
+
+        OutputStream outputStream = proc.getOutputStream(); //Input to Process
+        //Attach readers and writers
+        BufferedReader errorOutput = new BufferedReader(new InputStreamReader(errorStream));
+        BufferedReader output = new BufferedReader(new InputStreamReader(inputStream));
+        PrintWriter writer = new PrintWriter(outputStream);
+
+        List<String> errorStrings = new ArrayList<>();
+        List<String> outStrings = new ArrayList<>();
+        String currentError = null;
+        String currentOut = null;
+        while ((currentError = errorOutput.readLine())!=null ||
+                (currentOut = output.readLine())!=null){
+            if (currentError!=null) errorStrings.add(currentError);
+            if (currentOut!=null) outStrings.add(currentOut);
+        }
+
+        RunResult runResult = new RunResult();
+        runResult.setSuccess(proc.waitFor(2, TimeUnit.SECONDS));
+        runResult.setSystemErr(errorStrings);
+        runResult.setSystemOut(outStrings);
+        return runResult;
+    }
+
+    private ArrayList<DiagnosticResult> getDiagnosticResults(DiagnosticCollector<JavaFileObject> diagnosticCollector) {
+        List<Diagnostic<? extends JavaFileObject>> diagnostics = diagnosticCollector.getDiagnostics();
+        ArrayList<DiagnosticResult> resultList = new ArrayList<>();
+        for (Diagnostic diagnostic: diagnostics) {
+            DiagnosticResult result = new DiagnosticResult();
+            result.setMessage(diagnostic.getMessage(null));
+            result.setLineNumber(diagnostic.getLineNumber());
+            result.setColumn(diagnostic.getColumnNumber());
+            result.setStartPosition(diagnostic.getStartPosition());
+            result.setEndPosition(diagnostic.getEndPosition());
+            result.setKind(diagnostic.getKind());
+            result.setPosition(diagnostic.getPosition());
+            resultList.add(result);
+            }
+        return resultList;
+    }
+
+    private String javaCompileAndRun(String fileName) throws IOException, InterruptedException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<>();
         StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnosticCollector, null, StandardCharsets.UTF_8);
@@ -103,6 +184,16 @@ public class RootService {
             }
         return builder.toString();
         }
+    }
+
+    private String mainContents() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("public class Main {");
+        builder.append("\tpublic static void main(String[] args){");
+        builder.append("\t\tSystem.out.println(\"Hello World!\");");
+        builder.append("\t}");
+        builder.append("}");
+        return builder.toString();
     }
 
 }
