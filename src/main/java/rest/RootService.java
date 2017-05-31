@@ -96,7 +96,7 @@ public class RootService {
         String currentOut = null;
         while ((currentError = errorOutput.readLine())!=null ||
                 (currentOut = output.readLine())!=null){
-            if (currentError!=null) errorStrings.add(currentError);
+            if (currentError!=null && !currentError.contains("Picked up JAVA_TOOL_OPTIONS")) errorStrings.add(currentError);
             if (currentOut!=null) outStrings.add(currentOut);
         }
 
@@ -152,6 +152,7 @@ public class RootService {
                 String line2 = null;
                 while ((line1 = errorOutput.readLine()) != null ||
                         (line2 = output.readLine()) != null) {
+                    System.out.println(line1);
                     if (line1 != null && !(line1.contains("Picked up JAVA_TOOL_OPTIONS"))) error.append("error:" + line1 + "\r\n");
                     if (line2 != null) out.append("out: " +line2+ "\r\n");
                 }//end while
