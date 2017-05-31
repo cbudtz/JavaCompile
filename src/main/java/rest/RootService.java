@@ -152,7 +152,7 @@ public class RootService {
                 String line2 = null;
                 while ((line1 = errorOutput.readLine()) != null ||
                         (line2 = output.readLine()) != null) {
-                    if (line1 != null) error.append("error:" + line1 + "\r\n");
+                    if (line1 != null && !(line1.contains("Picked up JAVA_TOOL_OPTIONS"))) error.append("error:" + line1 + "\r\n");
                     if (line2 != null) out.append("out: " +line2+ "\r\n");
                 }//end while
                 errorOutput.close();
