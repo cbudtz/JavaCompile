@@ -34,28 +34,28 @@ public class RootService {
 
     @POST
     public CompileAndRunResult getRoot(CompilePack code) throws IOException, InterruptedException {
-        for (FileRepresentation codeFile: code.getFiles()) {
+        for (FileRepresentation codeFile : code.getFiles()) {
             System.out.println(codeFile.getFileContents());
 
         }
 
         boolean allSuccess = true;
         List<CompilationResult> results = new ArrayList<>();
-        for (FileRepresentation rep : code.getFiles()){
+        for (FileRepresentation rep : code.getFiles()) {
             List<String> lines = new ArrayList<>();
             lines.add(rep.getFileContents());
-            Files.write(Paths.get(rep.getFileName()),lines);
+            Files.write(Paths.get(rep.getFileName()), lines);
             CompilationResult result = javaCompile(rep.getFileName());
             results.add(result);
-            if (!result.isSuccess()) allSuccess=false;
+            if (!result.isSuccess()) allSuccess = false;
         }
         RunResult runResult = null;
 
-        if (allSuccess){
+        if (allSuccess) {
             runResult = javaRun(code);
         }
 
-        CompileAndRunResult compileAndRunResult = new CompileAndRunResult(allSuccess,results,runResult);
+        CompileAndRunResult compileAndRunResult = new CompileAndRunResult(allSuccess, results, runResult);
         return compileAndRunResult;
 
     }
@@ -81,6 +81,7 @@ public class RootService {
         //Start process
         Process proc = Runtime.getRuntime().exec("java -cp . " + pack.getMainClass());
         // Setup Streams
+        System.out.println("Running");
         InputStream errorStream = proc.getErrorStream(); //Error Output from Process
         InputStream inputStream = proc.getInputStream(); //Output from Process
 
@@ -94,23 +95,32 @@ public class RootService {
         List<String> outStrings = new ArrayList<>();
         String currentError = null;
         String currentOut = null;
-        while ((currentError = errorOutput.readLine())!=null ||
-                (currentOut = output.readLine())!=null){
-            if (currentError!=null && !currentError.contains("Picked up JAVA_TOOL_OPTIONS")) errorStrings.add(currentError);
-            if (currentOut!=null) outStrings.add(currentOut);
-        }
+
 
         RunResult runResult = new RunResult();
+        System.out.println("Witing for process");
         runResult.setSuccess(proc.waitFor(2, TimeUnit.SECONDS));
-        runResult.setSystemErr(errorStrings);
-        runResult.setSystemOut(outStrings);
+        System.out.println("Done waiting");
+        if (!runResult.isSuccess()) {
+            proc.destroyForcibly();
+            runResult.getSystemErr().add("JavaRunner: Process didn't finish within 2 seconds");
+        } else {
+            while ((currentError = errorOutput.readLine()) != null ||
+                    (currentOut = output.readLine()) != null) {
+                if (currentError != null && !currentError.contains("Picked up JAVA_TOOL_OPTIONS"))
+                    errorStrings.add(currentError);
+                if (currentOut != null) outStrings.add(currentOut);
+            }
+            runResult.setSystemErr(errorStrings);
+            runResult.setSystemOut(outStrings);
+        }
         return runResult;
     }
 
     private ArrayList<DiagnosticResult> getDiagnosticResults(DiagnosticCollector<JavaFileObject> diagnosticCollector) {
         List<Diagnostic<? extends JavaFileObject>> diagnostics = diagnosticCollector.getDiagnostics();
         ArrayList<DiagnosticResult> resultList = new ArrayList<>();
-        for (Diagnostic diagnostic: diagnostics) {
+        for (Diagnostic diagnostic : diagnostics) {
             DiagnosticResult result = new DiagnosticResult();
             result.setMessage(diagnostic.getMessage(null));
             result.setLineNumber(diagnostic.getLineNumber());
@@ -120,7 +130,7 @@ public class RootService {
             result.setKind(diagnostic.getKind());
             result.setPosition(diagnostic.getPosition());
             resultList.add(result);
-            }
+        }
         return resultList;
     }
 
@@ -148,13 +158,14 @@ public class RootService {
             StringBuilder out = new StringBuilder();
             StringBuilder error = new StringBuilder();
             try {
-                String line1 =null;
+                String line1 = null;
                 String line2 = null;
                 while ((line1 = errorOutput.readLine()) != null ||
                         (line2 = output.readLine()) != null) {
                     System.out.println(line1);
-                    if (line1 != null && !(line1.contains("Picked up JAVA_TOOL_OPTIONS"))) error.append("error:" + line1 + "\r\n");
-                    if (line2 != null) out.append("out: " +line2+ "\r\n");
+                    if (line1 != null && !(line1.contains("Picked up JAVA_TOOL_OPTIONS")))
+                        error.append("error:" + line1 + "\r\n");
+                    if (line2 != null) out.append("out: " + line2 + "\r\n");
                 }//end while
                 errorOutput.close();
                 output.close();
@@ -163,7 +174,7 @@ public class RootService {
             }//end catc
             boolean result = proc.waitFor(2, TimeUnit.SECONDS);
 
-            if (!result){
+            if (!result) {
                 return "process failed to run within 2 seconds - try again!";
             }
             return "Out: " + out.toString() + ", Error: " + error.toString();
@@ -180,10 +191,10 @@ public class RootService {
                 builder.append("StartPosition" + diagnostic.getStartPosition() + "\r\n");
                 builder.append("EndPosition: " + diagnostic.getEndPosition() + "\r\n");
 
-                builder.append("Source: " +diagnostic.getSource()+"\r\n");
+                builder.append("Source: " + diagnostic.getSource() + "\r\n");
                 builder.append("---------" + "\r\n");
             }
-        return builder.toString();
+            return builder.toString();
         }
     }
 
