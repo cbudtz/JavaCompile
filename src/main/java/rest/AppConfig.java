@@ -6,6 +6,6 @@ import javax.ws.rs.core.Application;
 /**
  * Created by Christian on 19-05-2017.
  */
-@ApplicationPath("/")
+@ApplicationPath("/api")
 public class AppConfig extends Application {
 }

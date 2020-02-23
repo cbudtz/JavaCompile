@@ -1,5 +1,11 @@
 package rest;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+
 import javax.tools.*;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
@@ -22,6 +28,7 @@ public class RootService {
 
     @GET
     @Path("template")
+    @Operation(description = "Get a sample template to try out compilation")
     public CompilePack getTemplate() throws IOException {
         CompilePack compilePack = new CompilePack();
         compilePack.setMainClass("Main");
@@ -33,10 +40,11 @@ public class RootService {
     }
 
     @POST
+    @Path("compile")
+    @Operation(description = "Post code to compile. Try GET /template to get an example")
     public CompileAndRunResult getRoot(CompilePack code) throws IOException, InterruptedException {
         for (FileRepresentation codeFile : code.getFiles()) {
             System.out.println(codeFile.getFileContents());
-
         }
 
         boolean allSuccess = true;
